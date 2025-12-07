@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Changed to relative path -->
+    <link rel="icon" href="./favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#2c3e50" />
+    <meta
+      name="description"
+      content="Omani Mushtara - A traditional trick-taking card game from the Gulf."
+    />
+    <!-- Changed to relative path -->
+    <link rel="apple-touch-icon" href="./logo192.png" />
+    <link rel="manifest" href="./manifest.json" />
+    
+    <!-- 
+      --- FONTS --- 
+      Cinzel Decorative & Cinzel (for the Royal Omani look) 
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@500&display=swap" rel="stylesheet">
+
+    <title>Omani Mushtara</title>
+    
+    <!-- DEBUG SCRIPT: Prints errors to the screen so you can see them -->
+    <script>
+      window.onerror = function(message, source, lineno, colno, error) {
+        const errorBox = document.createElement('div');
+        errorBox.style.background = '#ffdddd';
+        errorBox.style.color = 'red';
+        errorBox.style.padding = '20px';
+        errorBox.style.border = '1px solid red';
+        errorBox.style.margin = '20px';
+        errorBox.style.fontFamily = 'monospace';
+        errorBox.innerHTML = '<h3>Error Detected:</h3>' + 
+                             '<p>' + message + '</p>' +
+                             '<p>Source: ' + source + ':' + lineno + '</p>';
+        document.body.prepend(errorBox);
+      };
+    </script>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    
+    <!-- React will mount the application here -->
+    <div id="root">
+      <!-- Fallback text: If this stays visible, React hasn't mounted yet. -->
+      <div style="color: white; text-align: center; margin-top: 50px; font-family: sans-serif;">
+        <h1>Loading Game...</h1>
+        <p>If this message doesn't disappear, check if your <code>src/index.js</code> file exists.</p>
+      </div>
+    </div>
+    
+    <!-- 
+      IMPORTANT FIX: 
+      1. Changed path to "../src/index.js" (Relative path).
+         This allows the browser to step out of 'public' and find 'src'.
+      2. If you are using Vite, this file might need to be main.jsx.
+    -->
+    <script type="module" src="../src/index.js"></script>
+  </body>
+</html>
