@@ -1,404 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { SUITS, createDeck, shuffle } from './logic/deck';
+import { distributeHands, getCardScore, NEXT_PLAYER } from './logic/gameEngine';
+import Card from './components/Card';
 
-// --- GAME ENGINE & LOGIC ---
-
-const SUITS = ['S', 'H', 'C', 'D'];
-// UPDATE: Ranks now stop at 6 (36 card deck base)
-const RANKS = ['A', 'K', 'Q', 'J', '10', '9', '8', '7', '6'];
-
-// Player indices: 0 (User), 1 (CPU Left), 2 (Partner Top), 3 (CPU Right)
-// UPDATE: Counter-Clockwise Order: 0 -> 3 -> 2 -> 1 -> 0
-const NEXT_PLAYER = [3, 0, 1, 2];
-
-const createDeck = () => {
-    const deck = [];
-    let id = 0;
-    
-    // Add standard cards
-    SUITS.forEach(suit => {
-        RANKS.forEach(rank => {
-            let value = 0;
-            if (rank === 'A') value = 14;
-            else if (rank === 'K') value = 13;
-            else if (rank === 'Q') value = 12;
-            else if (rank === 'J') value = 11;
-            else value = parseInt(rank);
-            
-            // STRICT DECK FILTERING
-            // We want: A, K, Q, J, 10, 9, 8, 7 for ALL suits.
-            // We want: 6 for ONLY Spades (S) and Hearts (H).
-            let allow = true;
-
-            if (rank === '6') {
-                if (suit !== 'S' && suit !== 'H') {
-                    allow = false; // Exclude 6C and 6D
-                }
-            }
-
-            if (allow) {
-                 deck.push({ id: id++, suit, rank, value, type: 'standard' });
-            }
-        });
-    });
-
-    // Add Jokers
-    // JN = Joker Non-colored (Big), NQ = Naqsh/Colored (Small)
-    deck.push({ id: id++, suit: null, rank: 'JN', value: 20, type: 'joker' });
-    deck.push({ id: id++, suit: null, rank: 'NQ', value: 19, type: 'joker' });
-
-    return deck;
-};
-
-const shuffle = (deck) => {
-    for (let i = deck.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [deck[i], deck[j]] = [deck[j], deck[i]];
-    }
-    return deck;
-};
-
-const distributeHands = () => {
-    const deck = shuffle(createDeck());
-    const hands = [[], [], [], []];
-    
-    // Deal all cards (should be 9 per player now)
-    deck.forEach((card, i) => {
-        hands[i % 4].push(card);
-    });
-
-    return {
-        hands: hands,
-        msg: "Standard Deal"
-    };
-};
-
-const getCardScore = (card, leadSuit, trumpSuit, round, yidhamman) => {
-    // Scoring logic for determining the trick winner
-    // Base Values:
-    // Joker Big (JN) > Joker Small (NQ) > Trump > Lead > Others
-    
-    if (card.rank === 'JN') return 10000;
-    if (card.rank === 'NQ') return 9000;
-    
-    // Standard cards
-    let score = card.value;
-    
-    if (card.suit === trumpSuit) {
-        score += 1000; // Trump bonus
-    } else if (card.suit === leadSuit) {
-        score += 500; // Lead suit bonus
-    }
-    
-    return score;
-};
-
-// --- CSS STYLES ---
-
-const styles = `
-    .game-container {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        background-color: #2c3e50;
-        color: white;
-        height: 100vh;
-        width: 100vw;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        position: relative;
-    }
-
-    .status-bar {
-        display: flex;
-        justify-content: space-between;
-        padding: 10px 20px;
-        background-color: #34495e;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        z-index: 10;
-    }
-
-    .score-box, .bound-score {
-        font-weight: bold;
-        font-size: 1.1em;
-    }
-    
-    .bound-score { color: #f1c40f; }
-
-    .top-area, .bottom-area {
-        height: 25%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        padding: 10px;
-    }
-
-    .middle-area {
-        height: 50%;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0 20px;
-    }
-
-    .player-area {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.3s;
-        opacity: 0.7;
-    }
-
-    .active-turn {
-        opacity: 1;
-        transform: scale(1.05);
-    }
-    
-    .active-turn .player-name {
-        color: #f1c40f;
-        text-shadow: 0 0 10px #f1c40f;
-    }
-
-    .player-name {
-        margin-bottom: 5px;
-        font-weight: bold;
-        text-shadow: 1px 1px 2px black;
-    }
-    
-    .player-badge {
-        background: #e74c3c;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 0.7em;
-        margin-left: 5px;
-    }
-
-    .hand {
-        display: flex;
-        justify-content: center;
-        min-width: 300px;
-    }
-
-    .card {
-        width: 70px;
-        height: 100px;
-        background-color: white;
-        border-radius: 6px;
-        margin: 0 -20px; /* Overlap cards */
-        box-shadow: -2px 0 5px rgba(0,0,0,0.3);
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        padding: 5px;
-        color: black;
-        cursor: pointer;
-        transition: transform 0.2s;
-        position: relative;
-        user-select: none;
-    }
-
-    .card:hover {
-        transform: translateY(-15px);
-        z-index: 100;
-    }
-
-    .card.red { color: #c0392b; }
-    .card.black { color: #2c3e50; }
-
-    .card-top-left {
-        text-align: left;
-        line-height: 1;
-        font-size: 1.2em;
-        font-weight: bold;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-    }
-
-    .card-center {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-size: 2em;
-    }
-    
-    .card-joker-label {
-        font-size: 0.8em;
-        text-align: center;
-        margin-top: 30px;
-    }
-
-    .card-back {
-        width: 60px;
-        height: 90px;
-        background: repeating-linear-gradient(
-          45deg,
-          #c0392b,
-          #c0392b 10px,
-          #e74c3c 10px,
-          #e74c3c 20px
-        );
-        border: 2px solid white;
-        border-radius: 6px;
-        box-shadow: 1px 1px 3px rgba(0,0,0,0.5);
-    }
-
-    .trick-area {
-        width: 300px;
-        height: 200px;
-        position: relative;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background: rgba(255,255,255,0.05);
-        border-radius: 20px;
-    }
-
-    .trick-card {
-        position: absolute;
-        transition: all 0.5s;
-    }
-
-    .trick-card.p0 { bottom: 10px; }
-    .trick-card.p1 { left: 10px; }
-    .trick-card.p2 { top: 10px; }
-    .trick-card.p3 { right: 10px; }
-
-    /* Modals */
-    .modal-overlay {
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.85);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 1000;
-    }
-
-    .modal-content {
-        background: #ecf0f1;
-        color: #2c3e50;
-        padding: 30px;
-        border-radius: 10px;
-        text-align: center;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-        min-width: 300px;
-    }
-
-    button {
-        background: #27ae60;
-        color: white;
-        border: none;
-        padding: 10px 20px;
-        font-size: 1.1em;
-        border-radius: 5px;
-        cursor: pointer;
-        margin: 5px;
-        transition: background 0.2s;
-    }
-
-    button:hover { background: #2ecc71; }
-    button:disabled { background: #95a5a6; cursor: not-allowed; }
-    button.secondary { background: #7f8c8d; }
-    button.special { background: #e67e22; }
-
-    .bid-controls {
-        display: flex;
-        justify-content: center;
-        gap: 10px;
-        margin-top: 15px;
-    }
-
-    .suit-controls {
-        display: flex;
-        justify-content: center;
-        gap: 10px;
-        margin-top: 15px;
-    }
-    
-    .suit-btn {
-        font-size: 1.5em;
-        padding: 10px 15px;
-    }
-
-    .contract-display {
-        position: absolute;
-        top: 60px;
-        right: 20px;
-        background: rgba(0,0,0,0.5);
-        padding: 10px;
-        border-radius: 8px;
-        text-align: center;
-    }
-    
-    .contract-content {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 5px;
-        font-size: 1.5em;
-        font-weight: bold;
-    }
-    
-    .log-container {
-        position: absolute;
-        bottom: 10px;
-        left: 10px;
-        width: 250px;
-        height: 150px;
-        overflow-y: auto;
-        font-size: 0.8em;
-        background: rgba(0,0,0,0.3);
-        padding: 5px;
-        border-radius: 5px;
-        pointer-events: none;
-    }
-    
-    .log-msg { margin-bottom: 2px; color: #bdc3c7; }
-    .log-msg.important { color: #f1c40f; font-weight: bold; }
-`;
-
-// --- COMPONENTS ---
-
-const Card = ({ card, roundNumber, yidhamman, onClick }) => {
-    if (!card) return null;
-
-    const isRed = card.suit === 'H' || card.suit === 'D';
-    const isJoker = card.type === 'joker';
-    
-    const renderSuit = (s) => {
-        if (s === 'S') return '♠';
-        if (s === 'H') return '♥';
-        if (s === 'C') return '♣';
-        if (s === 'D') return '♦';
-        return '';
-    };
-
-    return (
-        <div 
-            className={`card ${isRed ? 'red' : 'black'}`} 
-            onClick={onClick}
-        >
-            <div className="card-top-left">
-                <span>{card.rank}</span>
-                {!isJoker && <span>{renderSuit(card.suit)}</span>}
-            </div>
-            
-            <div className="card-center">
-                {isJoker ? '🎭' : renderSuit(card.suit)}
-            </div>
-            
-            {isJoker && (
-                <div className="card-joker-label">
-                    {card.rank === 'JN' ? 'BIG' : 'SMALL'}
-                </div>
-            )}
-        </div>
-    );
-};
-
-
-// --- MAIN APP COMPONENT ---
+// ==========================================
+// SECTION 3: MAIN APP 
+// (Locally: This is the main part of src/App.jsx)
+// ==========================================
 
 const App = () => {
     const [gameState, setGameState] = useState('startMenu'); 
@@ -461,45 +69,27 @@ const App = () => {
     };
 
     const startGame = (nextDealer = 0, overrideHands = null) => {
-        let hands = [[], [], [], []];
+        let hands;
         let dealMsg = "";
 
         if (overrideHands && Array.isArray(overrideHands)) {
             hands = overrideHands;
             dealMsg = "Manual/Cheat Deal";
         } else {
-            try {
-                const result = distributeHands();
-                if (Array.isArray(result)) {
-                    hands = result;
-                    dealMsg = "Standard Deal";
-                } else if (result && Array.isArray(result.hands)) {
-                    hands = result.hands;
-                    dealMsg = result.msg || "Standard Deal";
-                } else {
-                    console.error("Error: distributeHands returned invalid data", result);
-                    hands = [[], [], [], []];
-                    dealMsg = "Error dealing hands";
-                }
-            } catch (error) {
-                console.error("Error executing distributeHands:", error);
-                hands = [[], [], [], []];
-                dealMsg = "Critical Deal Error";
-            }
+            const result = distributeHands();
+            hands = result.hands;
+            dealMsg = result.msg;
         }
         
-        if (Array.isArray(hands)) {
-            hands.forEach(h => {
-                if (Array.isArray(h)) {
-                    h.sort((a,b) => {
-                        if(a.type === 'joker') return 1; 
-                        if(b.type === 'joker') return -1;
-                        if(a.suit !== b.suit) return (SUITS || []).indexOf(a.suit) - (SUITS || []).indexOf(b.suit);
-                        return a.value - b.value;
-                    });
-                }
+        // Sort hands
+        hands.forEach(h => {
+            h.sort((a,b) => {
+                if(a.type === 'joker') return 1; 
+                if(b.type === 'joker') return -1;
+                if(a.suit !== b.suit) return (SUITS || []).indexOf(a.suit) - (SUITS || []).indexOf(b.suit);
+                return a.value - b.value;
             });
-        }
+        });
 
         setPlayers(hands);
         setGameState('bidding');
@@ -866,7 +456,354 @@ const App = () => {
 
     return (
         <div className="game-container">
-            <style>{styles}</style>
+            {/* INLINE STYLES FOR PREVIEW - Copy this to src/App.css */}
+            <style>{`
+                /* --- RESET & BASIC SETUP --- */
+                body { 
+                    margin: 0; 
+                    padding: 0; 
+                    overscroll-behavior: none; /* Prevent pull-to-refresh on mobile */
+                }
+
+                .game-container {
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    background-color: #2c3e50;
+                    color: white;
+                    /* Use dvh (dynamic viewport height) for better mobile browser support */
+                    height: 100dvh; 
+                    width: 100vw;
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
+                    position: relative;
+                }
+
+                /* --- STATUS BAR --- */
+                .status-bar {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 10px 15px;
+                    background-color: #34495e;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                    z-index: 10;
+                    font-size: 0.9em; /* Slightly smaller text for mobile */
+                }
+
+                .score-box, .bound-score {
+                    font-weight: bold;
+                }
+
+                .bound-score { color: #f1c40f; }
+
+                /* --- LAYOUT AREAS --- */
+                .top-area {
+                    height: 20%; /* Reduced height */
+                    display: flex;
+                    justify-content: center;
+                    align-items: flex-end; /* Push partner down closer to table */
+                    padding-bottom: 10px;
+                }
+
+                .middle-area {
+                    height: 45%; /* Main playing area */
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 0 5px; /* Minimal padding on sides */
+                    width: 100%;
+                    box-sizing: border-box;
+                }
+
+                .bottom-area {
+                    height: 35%; /* Larger area for user hand */
+                    display: flex;
+                    justify-content: center;
+                    align-items: center; /* Align to top of this section */
+                    padding-top: 10px;
+                    overflow: hidden;
+                }
+
+                /* --- PLAYER AREAS --- */
+                .player-area {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    transition: all 0.3s;
+                    opacity: 0.7;
+                    position: relative;
+                }
+
+                .active-turn {
+                    opacity: 1;
+                    transform: scale(1.05);
+                }
+
+                .active-turn .player-name {
+                    color: #f1c40f;
+                    text-shadow: 0 0 10px #f1c40f;
+                }
+
+                .player-name {
+                    margin-bottom: 5px;
+                    font-weight: bold;
+                    font-size: 0.8em;
+                    text-shadow: 1px 1px 2px black;
+                    white-space: nowrap;
+                }
+
+                .player-badge {
+                    background: #e74c3c;
+                    padding: 1px 4px;
+                    border-radius: 4px;
+                    font-size: 0.7em;
+                    margin-left: 5px;
+                }
+
+                /* --- CARDS --- */
+                /* User Hand Container - Mobile Arc Fan */
+                .bottom-area .hand {
+                    display: flex;
+                    justify-content: center; /* Center the fan */
+                    align-items: flex-end; /* Align bottom for arc */
+                    min-width: 100%;
+                    position: relative;
+                    height: 120px; /* Give some space for the arc */
+                }
+
+                /* Opponent Hands (Compact) */
+                .top-area .hand, .middle-area .hand {
+                    display: flex;
+                    justify-content: center;
+                    transform: scale(0.7); /* Make opponent cards smaller */
+                }
+
+                /* General Card Style */
+                .card {
+                    width: 60px; /* REDUCED WIDTH for mobile fit */
+                    height: 90px;
+                    background-color: white;
+                    border-radius: 6px;
+                    box-shadow: -2px 0 5px rgba(0,0,0,0.3);
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                    padding: 4px;
+                    color: black;
+                    cursor: pointer;
+                    user-select: none;
+                    font-family: sans-serif;
+                    /* ABSOLUTE POSITIONING TRANSITION */
+                    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+                    transform-origin: bottom center;
+                }
+
+                .card:hover {
+                    z-index: 100 !important;
+                    filter: brightness(1.1);
+                    /* Scale up slightly on hover */
+                    /* Note: Transform is inline in JS, so we use !important or just brightness */
+                }
+
+                /* Opponent/Side Card Backs */
+                .middle-area .player-area:first-child .hand {
+                    flex-direction: column;
+                    height: 150px;
+                    width: 40px;
+                    justify-content: center;
+                }
+
+                .middle-area .player-area:last-child .hand {
+                    flex-direction: column;
+                    height: 150px;
+                    width: 40px;
+                    justify-content: center;
+                }
+
+                /* Rotated cards for side players */
+                .middle-area .player-area:first-child .card-back {
+                    margin: -50px 0;
+                    transform: rotate(90deg);
+                }
+                .middle-area .player-area:last-child .card-back {
+                    margin: -50px 0;
+                    transform: rotate(-90deg);
+                }
+
+                .card.red { color: #c0392b; }
+                .card.black { color: #2c3e50; }
+
+                .card-top-left {
+                    text-align: left;
+                    line-height: 1;
+                    font-size: 1.1em;
+                    font-weight: bold;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                }
+
+                .card-center {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    font-size: 1.8em;
+                }
+
+                .card-joker-label {
+                    font-size: 0.6em;
+                    text-align: center;
+                    margin-top: auto;
+                    width: 100%;
+                }
+
+                .card-back {
+                    width: 55px;
+                    height: 85px;
+                    background: repeating-linear-gradient(
+                    45deg,
+                    #c0392b,
+                    #c0392b 10px,
+                    #e74c3c 10px,
+                    #e74c3c 20px
+                    );
+                    border: 2px solid white;
+                    border-radius: 6px;
+                    box-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+                    /* For opponent hands */
+                    margin: 0 -30px; 
+                }
+
+                /* --- TRICK AREA --- */
+                .trick-area {
+                    width: 180px; /* Constrain width for mobile */
+                    height: 140px;
+                    position: relative;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    background: rgba(255,255,255,0.05);
+                    border-radius: 15px;
+                    margin: 0 10px;
+                }
+
+                .trick-card {
+                    position: absolute;
+                    transition: all 0.5s ease-out;
+                    transform: scale(0.9);
+                }
+
+                .trick-card.p0 { bottom: 10px; z-index: 4; }
+                .trick-card.p1 { left: 5px; z-index: 2; }
+                .trick-card.p2 { top: 10px; z-index: 1; }
+                .trick-card.p3 { right: 5px; z-index: 3; }
+
+                /* --- UI OVERLAYS & CONTROLS --- */
+                .modal-overlay {
+                    position: fixed;
+                    top: 0; left: 0; right: 0; bottom: 0;
+                    background: rgba(0,0,0,0.85);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 1000;
+                }
+
+                /* Transparent Bidding Overlay - Positioned for Mobile */
+                .modal-overlay.bidding-overlay {
+                    background: transparent;
+                    align-items: flex-start;
+                    padding-top: 50px; /* Moved higher */
+                    pointer-events: none;
+                }
+
+                .modal-content {
+                    background: #ecf0f1;
+                    color: #2c3e50;
+                    padding: 20px;
+                    border-radius: 10px;
+                    text-align: center;
+                    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+                    width: 85%;
+                    max-width: 350px;
+                    pointer-events: auto;
+                }
+
+                .bid-controls, .suit-controls {
+                    display: flex;
+                    flex-wrap: wrap; /* Allow wrapping on small screens */
+                    justify-content: center;
+                    gap: 8px;
+                    margin-top: 15px;
+                }
+
+                button {
+                    background: #27ae60;
+                    color: white;
+                    border: none;
+                    padding: 12px 16px; /* Larger touch target */
+                    font-size: 1em;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    margin: 5px;
+                    touch-action: manipulation;
+                }
+
+                button:active { transform: scale(0.95); }
+                button:disabled { background: #95a5a6; opacity: 0.6; }
+                button.secondary { background: #7f8c8d; }
+                button.special { background: #e67e22; width: 100%; margin: 5px 0;}
+
+                .suit-btn {
+                    font-size: 1.5em;
+                    padding: 8px 15px;
+                }
+
+                /* Contract Display - Compact Mobile */
+                .contract-display {
+                    position: absolute;
+                    top: 55px; /* Below status bar */
+                    right: 10px;
+                    background: rgba(0,0,0,0.6);
+                    padding: 5px 10px;
+                    border-radius: 8px;
+                    text-align: center;
+                    z-index: 5;
+                    pointer-events: none;
+                }
+
+                .contract-label { font-size: 0.6em; color: #bdc3c7; text-transform: uppercase; }
+                .contract-content {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 5px;
+                    font-size: 1.2em;
+                    font-weight: bold;
+                }
+
+                /* Log - Moved to Top Left */
+                .log-container {
+                    position: absolute;
+                    top: 60px; /* Moved to top */
+                    left: 10px;
+                    width: 150px;
+                    height: 100px;
+                    overflow-y: auto;
+                    font-size: 0.7em;
+                    background: rgba(0,0,0,0.3);
+                    padding: 5px;
+                    border-radius: 5px;
+                    pointer-events: none;
+                    z-index: 5;
+                }
+
+                .log-msg { margin-bottom: 2px; color: #bdc3c7; }
+                .log-msg.important { color: #f1c40f; font-weight: bold; }
+            `}</style>
+
             <AIPlayer playerIdx={1} />
             <AIPlayer playerIdx={2} />
             <AIPlayer playerIdx={3} />
@@ -950,7 +887,7 @@ const App = () => {
 
                     {/* Bidding Overlays */}
                     {gameState === 'bidding' && currentBidder === 0 && (
-                        <div className="modal-overlay">
+                        <div className="modal-overlay bidding-overlay">
                             <div className="modal-content">
                                 <h3>{isDealerTurn ? "Dealer Choice" : `Make your Bid (Current: ${maxBid === 5 ? 0 : maxBid})`}</h3>
                                 <div className="bid-controls">
@@ -995,21 +932,49 @@ const App = () => {
                         <div className={`player-area ${turnIndex===0 ? 'active-turn':''}`}>
                             <div className="player-name">You (P0) {dealerIndex===0 && <span className="player-badge">Dealer</span>}</div>
                             <div className="hand">
-                                {players[0].map(c => (
-                                    <Card 
-                                        key={c.id} 
-                                        card={c} 
-                                        roundNumber={roundNumber} 
-                                        yidhamman={yidhamman}
-                                        onClick={() => {
-                                            if(turnIndex === 0 && gameState === 'playing') {
-                                                const check = checkMoveValidity(c, players[0]);
-                                                if(check.valid) playCard(0, c);
-                                                else addLog(`❌ Invalid: ${check.reason}`, true);
-                                            }
-                                        }}
-                                    />
-                                ))}
+                                {players[0].map((c, i) => {
+                                    const numCards = players[0].length;
+                                    
+                                    // GENTLER ARC FAN CALCULATION
+                                    const centerIdx = (numCards - 1) / 2;
+                                    const distance = i - centerIdx;
+
+                                    // Reduced rotation and spacing
+                                    const rotation = distance * 8; 
+                                    const xTrans = distance * 25; // Tighter spacing
+                                    
+                                    // Gentler curve
+                                    const yTrans = Math.pow(distance, 2) * 2;
+
+                                    const cardStyle = {
+                                        position: 'absolute',
+                                        bottom: '10px', // Lower the fan slightly
+                                        left: '50%',
+                                        transform: `
+                                            translateX(-50%) 
+                                            translateX(${xTrans}px) 
+                                            translateY(${yTrans}px) 
+                                            rotate(${rotation}deg)`,
+                                        zIndex: i,
+                                    };
+
+                                    return (
+                                        <Card 
+                                            key={c.id} 
+                                            card={c} 
+                                            roundNumber={roundNumber} 
+                                            yidhamman={yidhamman}
+                                            onClick={() => {
+                                                if(turnIndex === 0 && gameState === 'playing') {
+                                                    const check = checkMoveValidity(c, players[0]);
+                                                    if(check.valid) playCard(0, c);
+                                                    else addLog(`❌ Invalid: ${check.reason}`, true);
+                                                }
+                                            }}
+                                            style={cardStyle}
+                                        />
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
